@@ -1,263 +1,256 @@
-class Vector2 {
-  constructor(x = 0, y = 0) {
-    this.x = x;
-    this.y = y;
-  }
+// Canvas fireworks.  Click to add firworks.
 
-  add(v) {
-    this.x += v.x;
-    this.y += v.y;
-    return this;
-  }
+var SCREEN_WIDTH = window.innerWidth,
+    SCREEN_HEIGHT = window.innerHeight,
+    mousePos = {
+        x: 400,
+        y: 300
+    },
 
-  multiplyScalar(s) {
-    this.x *= s;
-    this.y *= s;
-    return this;
-  }
+    // fireworks canvas
+    canvas = fireworks,
+    context = canvas.getContext('2d'),
+    particles = [],
+    rockets = [],
+    MAX_PARTICLES = 300,
+    colorCode = 0;
 
-  clone() {
-    return new Vector2(this.x, this.y);
-  }}
+// initiate
+$(document).ready(function() {
+    document.body.appendChild(canvas);
+    canvas.width = SCREEN_WIDTH;
+    canvas.height = SCREEN_HEIGHT;
+    setInterval(launch, 800);
+    setInterval(loop, 1000 / 50);
+});
 
-
-class Time {
-  constructor() {
-    const now = Time.now();
-
-    this.delta = 0;
-    this.elapsed = 0;
-    this.start = now;
-    this.previous = now;
-  }
-
-  update() {
-    const now = Time.now();
-
-    this.delta = now - this.previous;
-    this.elapsed = now - this.start;
-    this.previous = now;
-  }
-
-  static now() {
-    return Date.now() / 1000;
-  }}
-
-
-class Particle {
-  constructor(position, velocity = new Vector2(), color = 'white', radius = 1, lifetime = 1, mass = 1) {
-    this.position = position;
-    this.velocity = velocity;
-    this.color = color;
-    this.radius = radius;
-    this.lifetime = lifetime;
-    this.mass = mass;
-
-    this.isInCanvas = true;
-    this.createdOn = Time.now();
-  }
-
-  update(time) {
-    if (!this.getRemainingLifetime()) {
-      return;
-    }
-
-    this.velocity.add(Particle.GRAVITATION.clone().multiplyScalar(this.mass));
-    this.position.add(this.velocity.clone().multiplyScalar(time.delta));
-  }
-
-  render(canvas, context) {
-    const remainingLifetime = this.getRemainingLifetime();
-
-    if (!remainingLifetime) return;
-
-    const radius = this.radius * remainingLifetime;
-
-    context.globalAlpha = remainingLifetime;
-    context.globalCompositeOperation = 'lighter';
-    context.fillStyle = this.color;
-
-    context.beginPath();
-    context.arc(this.position.x, this.position.y, radius, 0, Math.PI * 2);
-    context.fill();
-  }
-
-  getRemainingLifetime() {
-    const elapsedLifetime = Time.now() - this.createdOn;
-    return Math.max(0, this.lifetime - elapsedLifetime) / this.lifetime;
-  }}
-
-
-Particle.GRAVITATION = new Vector2(0, 9.81);
-
-class Trail extends Particle {
-  constructor(childFactory, position, velocity = new Vector2(), lifetime = 1, mass = 1) {
-    super(position, velocity);
-
-    this.childFactory = childFactory;
-    this.children = [];
-    this.lifetime = lifetime;
-    this.mass = mass;
-
-    this.isAlive = true;
-  }
-
-  update(time) {
-    super.update(time);
-
-    // Add a new child on every frame
-    if (this.isAlive && this.getRemainingLifetime()) {
-      this.children.push(this.childFactory(this));
-    }
-
-    // Remove particles that are dead
-    this.children = this.children.filter(function (child) {
-      if (child instanceof Trail) {
-        return child.isAlive;
-      }
-
-      return child.getRemainingLifetime();
-    });
-
-    // Kill trail if all particles fade away
-    if (!this.children.length) {
-      this.isAlive = false;
-    }
-
-    // Update particles
-    this.children.forEach(function (child) {
-      child.update(time);
-    });
-  }
-
-  render(canvas, context) {
-    // Render all children
-    this.children.forEach(function (child) {
-      child.render(canvas, context);
-    });
-  }}
-
-
-class Rocket extends Trail {
-  constructor(childFactory, explosionFactory, position, velocity = new Vector2()) {
-    super(childFactory, position, velocity);
-
-    this.explosionFactory = explosionFactory;
-    this.lifetime = 10;
-  }
-
-  update(time) {
-    if (this.getRemainingLifetime() && this.velocity.y > 0) {
-      this.explosionFactory(this);
-      this.lifetime = 0;
-    }
-
-    super.update(time);
-  }}
-
-
-const canvas = document.createElement('canvas');
-const context = canvas.getContext('2d');
-const time = new Time();
-let rockets = [];
-
-const getTrustParticleFactory = function (baseHue) {
-  function getColor() {
-    const hue = Math.floor(Math.random() * 15 + 30);
-    return `hsl(${hue}, 100%, 75%`;
-  }
-
-  return function (parent) {
-    const position = this.position.clone();
-    const velocity = this.velocity.clone().multiplyScalar(-.1);
-    velocity.x += (Math.random() - .5) * 8;
-    const color = getColor();
-    const radius = 1 + Math.random();
-    const lifetime = .5 + Math.random() * .5;
-    const mass = .01;
-
-    return new Particle(position, velocity, color, radius, lifetime, mass);
-  };
-};
-
-const getExplosionFactory = function (baseHue) {
-  function getColor() {
-    const hue = Math.floor(baseHue + Math.random() * 15) % 360;
-    const lightness = Math.floor(Math.pow(Math.random(), 2) * 50 + 50);
-    return `hsl(${hue}, 100%, ${lightness}%`;
-  }
-
-  function getChildFactory() {
-    return function (parent) {
-      const direction = Math.random() * Math.PI * 2;
-      const force = 8;
-      const velocity = new Vector2(Math.cos(direction) * force, Math.sin(direction) * force);
-      const color = getColor();
-      const radius = 1 + Math.random();
-      const lifetime = 1;
-      const mass = .1;
-
-      return new Particle(parent.position.clone(), velocity, color, radius, lifetime, mass);
+// update mouse position
+$(document).mousemove(function(e) {
+    e.preventDefault();
+    mousePos = {
+        x: e.clientX,
+        y: e.clientY
     };
-  }
+});
 
-  function getTrail(position) {
-    const direction = Math.random() * Math.PI * 2;
-    const force = Math.random() * 128;
-    const velocity = new Vector2(Math.cos(direction) * force, Math.sin(direction) * force);
-    const lifetime = .5 + Math.random();
-    const mass = .075;
-
-    return new Trail(getChildFactory(), position, velocity, lifetime, mass);
-  }
-
-  return function (parent) {
-    let trails = 32;
-    while (trails--) {
-      parent.children.push(getTrail(parent.position.clone()));
+// launch more rockets!!!
+$(document).mousedown(function(e) {
+    for (var i = 0; i < 5; i++) {
+        launchFrom(Math.random() * SCREEN_WIDTH * 2 / 3 + SCREEN_WIDTH / 6);
     }
-  };
+});
+
+function launch() {
+    launchFrom(mousePos.x);
+}
+
+function launchFrom(x) {
+    if (rockets.length < 10) {
+        var rocket = new Rocket(x);
+        rocket.explosionColor = Math.floor(Math.random() * 360 / 10) * 10;
+        rocket.vel.y = Math.random() * -3 - 4;
+        rocket.vel.x = Math.random() * 6 - 3;
+        rocket.size = 8;
+        rocket.shrink = 0.999;
+        rocket.gravity = 0.01;
+        rockets.push(rocket);
+    }
+}
+
+function loop() {
+    // update screen size
+    if (SCREEN_WIDTH != window.innerWidth) {
+        canvas.width = SCREEN_WIDTH = window.innerWidth;
+    }
+    if (SCREEN_HEIGHT != window.innerHeight) {
+        canvas.height = SCREEN_HEIGHT = window.innerHeight;
+    }
+
+    // clear canvas
+    context.fillStyle = "rgba(0, 0, 0, 0.05)";
+    context.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    var existingRockets = [];
+
+    for (var i = 0; i < rockets.length; i++) {
+        // update and render
+        rockets[i].update();
+        rockets[i].render(context);
+
+        // calculate distance with Pythagoras
+        var distance = Math.sqrt(Math.pow(mousePos.x - rockets[i].pos.x, 2) + Math.pow(mousePos.y - rockets[i].pos.y, 2));
+
+        // random chance of 1% if rockets is above the middle
+        var randomChance = rockets[i].pos.y < (SCREEN_HEIGHT * 2 / 3) ? (Math.random() * 100 <= 1) : false;
+
+/* Explosion rules
+             - 80% of screen
+            - going down
+            - close to the mouse
+            - 1% chance of random explosion
+        */
+        if (rockets[i].pos.y < SCREEN_HEIGHT / 5 || rockets[i].vel.y >= 0 || distance < 50 || randomChance) {
+            rockets[i].explode();
+        } else {
+            existingRockets.push(rockets[i]);
+        }
+    }
+
+    rockets = existingRockets;
+
+    var existingParticles = [];
+
+    for (var i = 0; i < particles.length; i++) {
+        particles[i].update();
+
+        // render and save particles that can be rendered
+        if (particles[i].exists()) {
+            particles[i].render(context);
+            existingParticles.push(particles[i]);
+        }
+    }
+
+    // update array with existing particles - old particles should be garbage collected
+    particles = existingParticles;
+
+    while (particles.length > MAX_PARTICLES) {
+        particles.shift();
+    }
+}
+
+function Particle(pos) {
+    this.pos = {
+        x: pos ? pos.x : 0,
+        y: pos ? pos.y : 0
+    };
+    this.vel = {
+        x: 0,
+        y: 0
+    };
+    this.shrink = .97;
+    this.size = 2;
+
+    this.resistance = 1;
+    this.gravity = 0;
+
+    this.flick = false;
+
+    this.alpha = 1;
+    this.fade = 0;
+    this.color = 0;
+}
+
+Particle.prototype.update = function() {
+    // apply resistance
+    this.vel.x *= this.resistance;
+    this.vel.y *= this.resistance;
+
+    // gravity down
+    this.vel.y += this.gravity;
+
+    // update position based on speed
+    this.pos.x += this.vel.x;
+    this.pos.y += this.vel.y;
+
+    // shrink
+    this.size *= this.shrink;
+
+    // fade out
+    this.alpha -= this.fade;
 };
 
-const addRocket = function () {
-  const trustParticleFactory = getTrustParticleFactory();
-  const explosionFactory = getExplosionFactory(Math.random() * 360);
+Particle.prototype.render = function(c) {
+    if (!this.exists()) {
+        return;
+    }
 
-  const position = new Vector2(Math.random() * canvas.width, canvas.height);
-  const thrust = window.innerHeight * .75;
-  const angle = Math.PI / -2 + (Math.random() - .5) * Math.PI / 8;
-  const velocity = new Vector2(Math.cos(angle) * thrust, Math.sin(angle) * thrust);
-  const lifetime = 3;
+    c.save();
 
-  rockets.push(new Rocket(trustParticleFactory, explosionFactory, position, velocity, lifetime));
+    c.globalCompositeOperation = 'lighter';
 
-  rockets = rockets.filter(function (rocket) {
-    return rocket.isAlive;
-  });
+    var x = this.pos.x,
+        y = this.pos.y,
+        r = this.size / 2;
+
+    var gradient = c.createRadialGradient(x, y, 0.1, x, y, r);
+    gradient.addColorStop(0.1, "rgba(255,255,255," + this.alpha + ")");
+    gradient.addColorStop(0.8, "hsla(" + this.color + ", 100%, 50%, " + this.alpha + ")");
+    gradient.addColorStop(1, "hsla(" + this.color + ", 100%, 50%, 0.1)");
+
+    c.fillStyle = gradient;
+
+    c.beginPath();
+    c.arc(this.pos.x, this.pos.y, this.flick ? Math.random() * this.size : this.size, 0, Math.PI * 2, true);
+    c.closePath();
+    c.fill();
+
+    c.restore();
 };
 
-const render = function () {
-  requestAnimationFrame(render);
-
-  time.update();
-  context.clearRect(0, 0, canvas.width, canvas.height);
-
-  rockets.forEach(function (rocket) {
-    rocket.update(time);
-    rocket.render(canvas, context);
-  });
+Particle.prototype.exists = function() {
+    return this.alpha >= 0.1 && this.size >= 1;
 };
 
-const resize = function () {
-  canvas.height = window.innerHeight;
-  canvas.width = window.innerWidth;
+function Rocket(x) {
+    Particle.apply(this, [{
+        x: x,
+        y: SCREEN_HEIGHT}]);
+
+    this.explosionColor = 0;
+}
+
+Rocket.prototype = new Particle();
+Rocket.prototype.constructor = Rocket;
+
+Rocket.prototype.explode = function() {
+    var count = Math.random() * 10 + 80;
+
+    for (var i = 0; i < count; i++) {
+        var particle = new Particle(this.pos);
+        var angle = Math.random() * Math.PI * 2;
+
+        // emulate 3D effect by using cosine and put more particles in the middle
+        var speed = Math.cos(Math.random() * Math.PI / 2) * 15;
+
+        particle.vel.x = Math.cos(angle) * speed;
+        particle.vel.y = Math.sin(angle) * speed;
+
+        particle.size = 10;
+
+        particle.gravity = 0.2;
+        particle.resistance = 0.92;
+        particle.shrink = Math.random() * 0.05 + 0.93;
+
+        particle.flick = true;
+        particle.color = this.explosionColor;
+
+        particles.push(particle);
+    }
 };
 
-canvas.onclick = addRocket;
-document.body.appendChild(canvas);
+Rocket.prototype.render = function(c) {
+    if (!this.exists()) {
+        return;
+    }
 
-window.onresize = resize;
-resize();
+    c.save();
 
-setInterval(addRocket, 2000);
-render();
+    c.globalCompositeOperation = 'lighter';
+
+    var x = this.pos.x,
+        y = this.pos.y,
+        r = this.size / 2;
+
+    var gradient = c.createRadialGradient(x, y, 0.1, x, y, r);
+    gradient.addColorStop(0.1, "rgba(255, 255, 255 ," + this.alpha + ")");
+    gradient.addColorStop(1, "rgba(0, 0, 0, " + this.alpha + ")");
+
+    c.fillStyle = gradient;
+
+    c.beginPath();
+    c.arc(this.pos.x, this.pos.y, this.flick ? Math.random() * this.size / 2 + this.size / 2 : this.size, 0, Math.PI * 2, true);
+    c.closePath();
+    c.fill();
+
+    c.restore();
+};

@@ -1,7 +1,25 @@
+@import url(https://fonts.googleapis.com/css?family=Open+Sans:800);
+
 body {
-	background-image: url("./pikachu.png");
-    background-size: cover;
+    background-color: #111;
+    margin: 0px;
+}
+#fireworks {
+    top: 0;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
+    position: absolute;
+    z-index: -1;
 }
 
-canvas { display: block; }
+h1 {
+    color: white;
+    font: 4.5em/1 Open Sans, Impact;
+}
+
+.box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
