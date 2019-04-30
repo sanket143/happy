@@ -1,0 +1,7 @@
+body {
+	background-image: url("./pikachu.png");
+    background-size: cover;
+    overflow: hidden;
+}
+
+canvas { display: block; }
